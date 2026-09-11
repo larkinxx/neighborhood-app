@@ -13,15 +13,21 @@ const DEFAULT_ZOOM = 12
 // OpenFreeMap — полностью бесплатные векторные тайлы без ключа и лимитов.
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
 
-// Библиотеку грузим через CDN, а не npm-импортом: Turbopack (сборщик
-// Next.js 16) не умеет корректно упаковывать веб-воркер MapLibre при
-// обычном import()'е — воркер не грузится (404 → HTML вместо JS →
-// "Failed to load module script"), из-за чего рисуется только фон и
-// кнопки карты, а сами тайлы с домами/дорогами — никогда. Готовый бандл
-// с CDN несёт воркер внутри себя одним файлом, эта проблема сборщика
-// его не касается. Версия должна совпадать с той, что в package.json
-// (нужна только для TypeScript-типов и CSS выше).
-const MAPLIBRE_CDN_URL = 'https://unpkg.com/maplibre-gl@6.9.0/dist/maplibre-gl.js'
+// С версии 6 maplibre-gl больше не собирает классический бандл для
+// <script src>, только ES-модуль (dist/maplibre-gl.mjs) — а версии ≤6.4.0
+// с ещё живым классическим бандлом содержат критическую XSS-уязвимость
+// (GHSA-jrc7-96c5-q579), так что откатываться на них нельзя. Поэтому
+// грузим актуальную версию как нативный ES-модуль прямо с CDN — браузер
+// импортирует её сам, минуя сборщик Next.js целиком. Это заодно обходит
+// баг Turbopack, из-за которого веб-воркер MapLibre не грузился при
+// обычном npm-импорте (см. коммит 9f2e853): раз код вообще не проходит
+// через Turbopack, тот баг просто не может проявиться.
+const MAPLIBRE_VERSION = '6.9.0'
+const MAPLIBRE_LOADER_SCRIPT = `
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.mjs';
+window.maplibregl = maplibregl;
+window.dispatchEvent(new Event('maplibregl:ready'));
+`
 
 declare global {
   interface Window {
@@ -54,6 +60,23 @@ export default function HomeMapPicker({
   const [scriptReady, setScriptReady] = useState(
     () => typeof window !== 'undefined' && !!window.maplibregl
   )
+
+  // Модульный скрипт с одним и тем же id Next.js вставляет в документ один
+  // раз за всю сессию (при повторном монтировании компонента — например,
+  // при переходе между онбордингом и гостевой картой — просто переиспользует
+  // уже выполненный тег), поэтому событие может не прийти повторно —
+  // подстраховываемся проверкой window.maplibregl при каждом монтировании.
+  useEffect(() => {
+    // Если window.maplibregl уже есть на момент монтирования, ленивый
+    // инициализатор useState выше уже это учёл — здесь только подписка
+    // на случай, если скрипт ещё грузится.
+    if (scriptReady) return
+    function onReady() {
+      setScriptReady(true)
+    }
+    window.addEventListener('maplibregl:ready', onReady)
+    return () => window.removeEventListener('maplibregl:ready', onReady)
+  }, [scriptReady])
 
   useEffect(() => {
     if (!scriptReady || !containerRef.current || mapRef.current) return
@@ -112,7 +135,9 @@ export default function HomeMapPicker({
 
   return (
     <div>
-      <Script src={MAPLIBRE_CDN_URL} strategy="afterInteractive" onReady={() => setScriptReady(true)} />
+      <Script id="maplibre-esm-loader" type="module" strategy="afterInteractive">
+        {MAPLIBRE_LOADER_SCRIPT}
+      </Script>
       <div
         ref={containerRef}
         className="h-[400px] w-full rounded-xl border border-black/10 dark:border-white/10"
