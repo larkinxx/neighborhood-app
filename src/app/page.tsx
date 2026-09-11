@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import GuestLocationPicker from '@/components/GuestLocationPicker'
 
 const FEATURES = [
   {
@@ -42,9 +43,13 @@ export default function Home() {
         <span className="text-sm font-semibold tracking-tight text-black dark:text-zinc-50">
           Соседи
         </span>
+        {/* Один-единственный вход в регистрацию на всей странице — тихая
+            ссылка сбоку, без кнопки и без повторов ниже (по образцу Avito:
+            анонимный просмотр по умолчанию, вход нужен только когда решил
+            откликнуться/опубликовать). */}
         <Link
           href="/login"
-          className="rounded-md border border-black/10 px-4 py-2 text-sm text-black transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] hover:bg-black/[.04] active:scale-[0.97] dark:border-white/10 dark:text-zinc-50 dark:hover:bg-white/[.06]"
+          className="text-sm text-zinc-500 transition-colors hover:text-black dark:text-zinc-500 dark:hover:text-zinc-50"
         >
           Войти
         </Link>
@@ -72,22 +77,8 @@ export default function Home() {
             Объявления, находки, услуги и срочные оповещения от соседей — в радиусе,
             который выбираете вы. Никакого шума с другого конца города.
           </p>
-          <div
-            className="animate-fade-up flex flex-col gap-3 pt-2 sm:flex-row"
-            style={{ animationDelay: '180ms' }}
-          >
-            <Link
-              href="/login"
-              className="flex h-11 items-center justify-center rounded-md bg-black px-6 text-sm font-medium text-white transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] active:scale-[0.97] dark:bg-white dark:text-black"
-            >
-              Войти по почте
-            </Link>
-            <a
-              href="#how"
-              className="flex h-11 items-center justify-center rounded-md border border-black/10 px-6 text-sm font-medium text-black transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] hover:bg-black/[.04] active:scale-[0.97] dark:border-white/10 dark:text-zinc-50 dark:hover:bg-white/[.06]"
-            >
-              Как это работает
-            </a>
+          <div className="animate-fade-up w-full pt-2" style={{ animationDelay: '180ms' }}>
+            <GuestLocationPicker />
           </div>
         </section>
 

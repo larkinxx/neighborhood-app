@@ -13,13 +13,24 @@ type Coords = { lat: number; lng: number }
 
 export default function HomeMapPicker({
   onChange,
+  initialCenter = DEFAULT_CENTER,
+  initialZoom = DEFAULT_ZOOM,
+  initialCoords,
+  hint = 'Кликните по карте в том месте, где находится ваш дом',
 }: {
   onChange: (coords: Coords) => void
+  // Центр и стартовая точка — например, дом пользователя вместо центра
+  // Москвы, когда карта используется не для онбординга, а для выбора
+  // места конкретного поста.
+  initialCenter?: [number, number]
+  initialZoom?: number
+  initialCoords?: Coords
+  hint?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<LeafletMap | null>(null)
   const markerRef = useRef<LeafletMarker | null>(null)
-  const [coords, setCoords] = useState<Coords | null>(null)
+  const [coords, setCoords] = useState<Coords | null>(initialCoords ?? null)
 
   useEffect(() => {
     let cancelled = false
@@ -28,20 +39,22 @@ export default function HomeMapPicker({
       if (cancelled || !containerRef.current || mapRef.current) return
       const L = leafletModule.default
 
-      const map = L.map(containerRef.current).setView(DEFAULT_CENTER, DEFAULT_ZOOM)
+      const map = L.map(containerRef.current).setView(
+        initialCoords ? [initialCoords.lat, initialCoords.lng] : initialCenter,
+        initialZoom
+      )
       mapRef.current = map
       // Убираем дефолтный префикс Leaflet (флаг Украины + ссылка на leafletjs.com)
       // из attribution-контрола — оставляем только обязательную по лицензии
       // атрибуцию источников тайлов ниже.
       map.attributionControl.setPrefix(false)
 
-      // CARTO Voyager вместо стандартных тайлов OSM — тот же бесплатный слой
-      // без API-ключа, но современнее выглядит (мягкая палитра, чище лейблы).
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20,
+      // Стандартные тайлы OSM — CARTO Voyager (использовался раньше) теперь
+      // требует API-ключ у анонимных запросов и рендерит плашку "API KEY
+      // REQUIRED" вместо карты, так что вернули действительно бесключевой слой.
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
       }).addTo(map)
 
       // Иконки маркера грузим с CDN — иначе бандлер next.js ломает пути
@@ -75,6 +88,10 @@ export default function HomeMapPicker({
       map.on('click', (e) => {
         placeMarker(e.latlng.lat, e.latlng.lng)
       })
+
+      if (initialCoords) {
+        placeMarker(initialCoords.lat, initialCoords.lng)
+      }
     })
 
     return () => {
@@ -95,7 +112,7 @@ export default function HomeMapPicker({
       <p className="mt-2 text-sm text-zinc-500">
         {coords
           ? `Точка: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)} — можно перетащить маркер, чтобы уточнить`
-          : 'Кликните по карте в том месте, где находится ваш дом'}
+          : hint}
       </p>
     </div>
   )

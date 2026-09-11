@@ -1,0 +1,28 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import NewPostForm from './new-post-form'
+
+export default async function NewPostPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('home_lat, home_lng')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.home_lat == null || profile?.home_lng == null) {
+    redirect('/onboarding')
+  }
+
+  return (
+    <NewPostForm homeLat={profile.home_lat} homeLng={profile.home_lng} />
+  )
+}
