@@ -1,13 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import type { Map as MapLibreMap, Marker as MapLibreMarker, MapMouseEvent } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
 // Москва как дефолтный центр карты — просто чтобы было куда смотреть при
 // первом открытии, на сам выбор точки не влияет.
 const DEFAULT_CENTER: [number, number] = [55.751244, 37.618423]
 const DEFAULT_ZOOM = 12
+
+// OpenFreeMap — полностью бесплатные векторные тайлы без ключа и лимитов
+// (в отличие от CARTO, который в какой-то момент стал требовать API-ключ
+// даже для анонимных запросов). Стиль Liberty — современная, детальная
+// картография, похожая по духу на прежний CARTO Voyager.
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
 
 type Coords = { lat: number; lng: number }
 
@@ -28,54 +34,41 @@ export default function HomeMapPicker({
   hint?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<LeafletMap | null>(null)
-  const markerRef = useRef<LeafletMarker | null>(null)
+  const mapRef = useRef<MapLibreMap | null>(null)
+  const markerRef = useRef<MapLibreMarker | null>(null)
   const [coords, setCoords] = useState<Coords | null>(initialCoords ?? null)
 
   useEffect(() => {
     let cancelled = false
 
-    import('leaflet').then((leafletModule) => {
+    import('maplibre-gl').then((maplibreModule) => {
       if (cancelled || !containerRef.current || mapRef.current) return
-      const L = leafletModule.default
+      const maplibregl = maplibreModule
 
-      const map = L.map(containerRef.current).setView(
-        initialCoords ? [initialCoords.lat, initialCoords.lng] : initialCenter,
-        initialZoom
-      )
-      mapRef.current = map
-      // Убираем дефолтный префикс Leaflet (флаг Украины + ссылка на leafletjs.com)
-      // из attribution-контрола — оставляем только обязательную по лицензии
-      // атрибуцию источников тайлов ниже.
-      map.attributionControl.setPrefix(false)
+      // MapLibre принимает центр как [lng, lat], а не [lat, lng].
+      const center: [number, number] = initialCoords
+        ? [initialCoords.lng, initialCoords.lat]
+        : [initialCenter[1], initialCenter[0]]
 
-      // Стандартные тайлы OSM — CARTO Voyager (использовался раньше) теперь
-      // требует API-ключ у анонимных запросов и рендерит плашку "API KEY
-      // REQUIRED" вместо карты, так что вернули действительно бесключевой слой.
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map)
-
-      // Иконки маркера грузим с CDN — иначе бандлер next.js ломает пути
-      // к дефолтным картинкам leaflet при сборке.
-      const icon = L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: STYLE_URL,
+        center,
+        zoom: initialZoom,
+        attributionControl: { compact: true },
       })
+      mapRef.current = map
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
 
       function placeMarker(lat: number, lng: number) {
         if (markerRef.current) {
-          markerRef.current.setLatLng([lat, lng])
+          markerRef.current.setLngLat([lng, lat])
         } else {
-          const marker = L.marker([lat, lng], { icon, draggable: true }).addTo(map)
+          const marker = new maplibregl.Marker({ draggable: true, color: '#dc2626' })
+            .setLngLat([lng, lat])
+            .addTo(map)
           marker.on('dragend', () => {
-            const pos = marker.getLatLng()
+            const pos = marker.getLngLat()
             setCoords({ lat: pos.lat, lng: pos.lng })
             onChange({ lat: pos.lat, lng: pos.lng })
           })
@@ -85,8 +78,8 @@ export default function HomeMapPicker({
         onChange({ lat, lng })
       }
 
-      map.on('click', (e) => {
-        placeMarker(e.latlng.lat, e.latlng.lng)
+      map.on('click', (e: MapMouseEvent) => {
+        placeMarker(e.lngLat.lat, e.lngLat.lng)
       })
 
       if (initialCoords) {
