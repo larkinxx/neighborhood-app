@@ -148,7 +148,7 @@ export default async function FeedPage({
     }
 
     return (
-      <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
+      <div className="flex min-h-screen flex-col">
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
           <header className="flex items-center justify-between">
             <div>
@@ -226,7 +226,7 @@ export default async function FeedPage({
   const { data: posts } = await postsQuery
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
+    <div className="flex min-h-screen flex-col">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
         <header className="flex items-center justify-between">
           <div>

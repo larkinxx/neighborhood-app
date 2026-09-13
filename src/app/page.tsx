@@ -38,18 +38,7 @@ const STEPS = [
 
 export default function Home() {
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
-      {/* Тонкий декоративный фон только для тёмной темы — мягкое свечение
-          сверху + едва заметная сетка, чтобы плоский чёрный не выглядел
-          слишком просто. Полностью pointer-events-none, не мешает контенту. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 hidden dark:block dark:[background:radial-gradient(ellipse_70%_55%_at_50%_-10%,rgba(139,139,220,0.28),transparent_70%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 hidden dark:block dark:opacity-70 [background-image:linear-gradient(to_right,rgba(180,180,200,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(180,180,200,0.14)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_65%_50%_at_50%_-10%,black,transparent_75%)]"
-      />
+    <div className="flex flex-1 flex-col">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
         <span className="text-sm font-semibold tracking-tight text-black dark:text-zinc-50">
           Соседи
