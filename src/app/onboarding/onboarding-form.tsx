@@ -40,6 +40,9 @@ export default function OnboardingForm() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center p-6">
+      <span className="mb-6 text-sm font-semibold tracking-tight text-black dark:text-zinc-50">
+        Соседи
+      </span>
       <h1 className="mb-2 text-xl font-semibold text-black dark:text-zinc-50">
         Где вы живёте?
       </h1>
