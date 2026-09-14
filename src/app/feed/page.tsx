@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Flag, SealCheck } from '@phosphor-icons/react/dist/ssr'
 import { createClient } from '@/lib/supabase/server'
-import { signOut } from './actions'
+import { signOut, reportPost } from './actions'
 import RadiusFilter from '@/components/RadiusFilter'
 import DistrictFilter from '@/components/DistrictFilter'
+import { isAdmin } from '@/lib/admin'
 
 const TYPE_ORDER = ['announcement', 'found', 'service', 'emergency'] as const
 type PostType = (typeof TYPE_ORDER)[number]
@@ -25,6 +27,8 @@ const TYPE_BADGE_CLASS: Record<PostType, string> = {
 const STATUS_LABELS: Record<string, string> = {
   pending: 'на модерации',
   hidden: 'скрыт',
+  under_review: 'на проверке',
+  banned: 'заблокирован',
 }
 
 function isPostType(value: string | undefined): value is PostType {
@@ -60,13 +64,33 @@ type Post = {
   author_id: string
 }
 
+// Безопасная выборка is_verified по списку авторов через public.public_profiles
+// (view с RLS-обходом только для двух не чувствительных колонок — см.
+// миграцию 20260914090000). Отдельным запросом, а не embed'ом, потому что
+// PostgREST не умеет обнаружить связь posts.author_id -> view.
+async function fetchVerifiedAuthorIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  authorIds: string[]
+) {
+  if (authorIds.length === 0) return new Set<string>()
+  const { data } = await supabase
+    .from('public_profiles')
+    .select('id, is_verified')
+    .in('id', Array.from(new Set(authorIds)))
+  return new Set((data ?? []).filter((p) => p.is_verified).map((p) => p.id))
+}
+
 function PostList({
   posts,
   currentUserId,
+  verifiedAuthorIds,
+  reportable,
   emptyMessage,
 }: {
   posts: Post[] | null
   currentUserId?: string
+  verifiedAuthorIds?: Set<string>
+  reportable?: boolean
   emptyMessage: string
 }) {
   return (
@@ -83,6 +107,14 @@ function PostList({
               >
                 {TYPE_LABELS[post.type as PostType]}
               </span>
+              {verifiedAuthorIds?.has(post.author_id) && (
+                <span
+                  title="Подтверждённый житель"
+                  className="flex items-center text-emerald-600 dark:text-emerald-400"
+                >
+                  <SealCheck size={16} weight="fill" aria-hidden="true" />
+                </span>
+              )}
               {post.author_id === currentUserId && post.status !== 'active' && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
                   {STATUS_LABELS[post.status] ?? post.status}
@@ -98,6 +130,18 @@ function PostList({
               </span>
             </div>
             <p className="text-sm leading-6 text-black dark:text-zinc-50">{post.text}</p>
+            {reportable && post.author_id !== currentUserId && (
+              <form action={reportPost} className="mt-3">
+                <input type="hidden" name="post_id" value={post.id} />
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 text-xs text-zinc-400 transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] hover:text-red-600 active:scale-[0.97] dark:text-zinc-600 dark:hover:text-red-400"
+                >
+                  <Flag size={14} aria-hidden="true" />
+                  Пожаловаться
+                </button>
+              </form>
+            )}
           </li>
         ))
       ) : (
@@ -147,6 +191,11 @@ export default async function FeedPage({
       posts = data
     }
 
+    const verifiedAuthorIds = await fetchVerifiedAuthorIds(
+      supabase,
+      (posts ?? []).map((p) => p.author_id)
+    )
+
     return (
       <div className="flex min-h-screen flex-col">
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
@@ -191,6 +240,7 @@ export default async function FeedPage({
 
           <PostList
             posts={posts}
+            verifiedAuthorIds={verifiedAuthorIds}
             emptyMessage={
               districtId
                 ? type
@@ -224,6 +274,10 @@ export default async function FeedPage({
   }
 
   const { data: posts } = await postsQuery
+  const verifiedAuthorIds = await fetchVerifiedAuthorIds(
+    supabase,
+    (posts ?? []).map((p) => p.author_id)
+  )
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -234,6 +288,20 @@ export default async function FeedPage({
             <p className="text-sm text-zinc-600 dark:text-zinc-400">{user.email ?? user.phone}</p>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin(user.email) && (
+              <Link
+                href="/admin"
+                className="flex h-9 items-center rounded-md border border-black/10 px-4 text-sm text-black transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] active:scale-[0.97] dark:border-white/10 dark:text-zinc-50"
+              >
+                Админка
+              </Link>
+            )}
+            <Link
+              href="/profile"
+              className="flex h-9 items-center rounded-md border border-black/10 px-4 text-sm text-black transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] active:scale-[0.97] dark:border-white/10 dark:text-zinc-50"
+            >
+              Профиль
+            </Link>
             <Link
               href="/feed/new"
               className="flex h-9 items-center rounded-md bg-black px-4 text-sm text-white transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)] active:scale-[0.97] dark:bg-white dark:text-black"
@@ -265,6 +333,8 @@ export default async function FeedPage({
         <PostList
           posts={posts}
           currentUserId={user.id}
+          verifiedAuthorIds={verifiedAuthorIds}
+          reportable
           emptyMessage={
             type
               ? 'В этой категории пока нет постов в вашем радиусе.'

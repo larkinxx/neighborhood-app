@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
 export async function signOut() {
@@ -41,4 +42,40 @@ export async function updateRadius(formData: FormData) {
   }
 
   redirect(type ? `/feed?type=${type}` : '/feed')
+}
+
+// Жалоба на пост: без причины, одна кнопка. Сама смена статуса поста на
+// 'under_review' (и, тем самым, его исчезновение из чужих лент) происходит
+// в БД триггером on_report_created — не здесь, потому что у обычного
+// пользователя нет права редактировать чужой пост (RLS "posts: update own"),
+// и это правильно: сервер-экшен не должен для этого использовать более
+// широкие права, чем есть у пользователя.
+export async function reportPost(formData: FormData) {
+  const postId = formData.get('post_id') as string | null
+  if (!postId) {
+    throw new Error('Не указан пост')
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: user.id,
+    post_id: postId,
+  })
+
+  // 23505 = уникальное ограничение (reporter_id, post_id) — пользователь
+  // уже жаловался на этот пост раньше. Это не ошибка с точки зрения UX:
+  // просто молча считаем жалобу принятой, ничего дополнительно не сообщаем.
+  if (error && error.code !== '23505') {
+    throw new Error(error.message)
+  }
+
+  revalidatePath('/feed')
 }
