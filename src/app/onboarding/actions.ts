@@ -37,7 +37,12 @@ export async function saveHomeLocation(formData: FormData) {
     districtId = district?.id ?? null
   }
 
-  const { error } = await supabase
+  // .select().single() после update — не просто чтобы получить данные
+  // обратно, а чтобы ПОЙМАТЬ случай, когда update молча затронул 0 строк
+  // (RLS не пропустила запись, или профиля не нашлось): PostgREST в этом
+  // случае сам вернёт ошибку в error, а не тихо отдаст пустой результат —
+  // без .single() такой сбой было бы не отличить от настоящего успеха.
+  const { data: updated, error } = await supabase
     .from('users')
     .update({
       home_lat: lat,
@@ -47,9 +52,13 @@ export async function saveHomeLocation(formData: FormData) {
       district_id: districtId,
     })
     .eq('id', user.id)
+    .select('id')
+    .single()
 
-  if (error) {
-    throw new Error(error.message)
+  if (error || !updated) {
+    throw new Error(
+      error?.message ?? 'Не удалось сохранить адрес — попробуйте ещё раз'
+    )
   }
 
   redirect('/feed')
