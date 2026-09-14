@@ -10,7 +10,24 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+      // За реверс-прокси Timeweb "origin" из самого запроса иногда
+      // оказывается внутренним адресом контейнера (например, localhost),
+      // а не публичным доменом — прокси не всегда переписывает Host.
+      // x-forwarded-host — стандартный заголовок, который прокси
+      // проставляет с реальным адресом, с которого пришёл пользователь;
+      // это официально документированный Supabase способ обхода именно
+      // этой проблемы для Next.js за балансировщиком/прокси.
+      const forwardedHost = request.headers.get('x-forwarded-host')
+      const isLocalEnv = process.env.NODE_ENV === 'development'
+
+      if (isLocalEnv) {
+        // Локальная разработка без прокси — origin уже верный.
+        return NextResponse.redirect(`${origin}${next}`)
+      } else if (forwardedHost) {
+        return NextResponse.redirect(`https://${forwardedHost}${next}`)
+      } else {
+        return NextResponse.redirect(`${origin}${next}`)
+      }
     }
   }
 
