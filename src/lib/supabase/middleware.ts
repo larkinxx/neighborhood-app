@@ -27,7 +27,20 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard
   // to debug issues with users being randomly logged out.
   // Refreshing the session token as a side effect — result intentionally unused here.
-  await supabase.auth.getUser()
+  try {
+    await supabase.auth.getUser()
+  } catch {
+    // Протухший или уже использованный refresh token (частое дело при
+    // многократном тестировании через magic link) — supabase-js в этом
+    // случае не возвращает { error }, а бросает AuthApiError прямо из
+    // getUser(). Без этого catch ошибка улетала бы дальше в рендер
+    // серверных компонентов и валила всю страницу (React error #441),
+    // хотя по сути это просто "пользователь разлогинен". scope: 'local'
+    // ничего не шлёт на сервер (там и так уже нечего подтверждать) —
+    // только чистит битые cookies, чтобы страница отрендерилась как
+    // для гостя, а не упала.
+    await supabase.auth.signOut({ scope: 'local' })
+  }
 
   return supabaseResponse
 }
