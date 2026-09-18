@@ -26,14 +26,15 @@ export default function OnboardingForm() {
     formData.set('radius_m', String(radius))
 
     startTransition(async () => {
-      try {
-        await saveHomeLocation(formData)
-      } catch (err) {
-        // redirect() внутри saveHomeLocation бросает специальный объект,
-        // который next.js обрабатывает сам — здесь ловим только реальные ошибки
-        if (err instanceof Error && err.message) {
-          setError(err.message)
-        }
+      // saveHomeLocation возвращает { error } вместо throw при ожидаемых
+      // сбоях (см. комментарий в actions.ts) — так текст ошибки доходит
+      // до пользователя как есть, а не заменяется Next.js в проде на
+      // generic "Minified React error #441…". redirect() внутри действия
+      // на успехе всё равно бросает специальный объект, который next.js
+      // обрабатывает сам — sync-catch здесь не нужен.
+      const result = await saveHomeLocation(formData)
+      if (result?.error) {
+        setError(result.error)
       }
     })
   }

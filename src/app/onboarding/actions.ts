@@ -4,14 +4,16 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { findDistrictOsmId } from '@/lib/districts'
 
-export async function saveHomeLocation(formData: FormData) {
+export async function saveHomeLocation(
+  formData: FormData
+): Promise<{ error: string } | void> {
   const lat = Number(formData.get('lat'))
   const lng = Number(formData.get('lng'))
   const homeComplex = (formData.get('home_complex') as string) || null
   const radiusM = Number(formData.get('radius_m')) || 800
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    throw new Error('Сначала поставьте точку на карте')
+    return { error: 'Сначала поставьте точку на карте' }
   }
 
   const supabase = await createClient()
@@ -56,9 +58,25 @@ export async function saveHomeLocation(formData: FormData) {
     .single()
 
   if (error || !updated) {
-    throw new Error(
-      error?.message ?? 'Не удалось сохранить адрес — попробуйте ещё раз'
-    )
+    // ВАЖНО: не throw. Next.js в продакшене подменяет текст любой
+    // выброшенной из Server Action ошибки на общий "Minified React
+    // error #441…" (та же обфускация, что и для ошибок рендера серверных
+    // компонентов) — именно это мы и увидели на экране онбординга.
+    // Возврат объекта с error вместо throw — рекомендованный Next.js
+    // паттерн для ожидаемых/обрабатываемых ошибок: такой текст доходит
+    // до клиента как есть, без обфускации.
+    console.error('saveHomeLocation: update users failed', {
+      userId: user.id,
+      lat,
+      lng,
+      districtId,
+      error,
+    })
+    return {
+      error: error?.message
+        ? `Не удалось сохранить адрес: ${error.message}`
+        : 'Не удалось сохранить адрес — профиль не найден или нет прав на изменение',
+    }
   }
 
   redirect('/feed')
